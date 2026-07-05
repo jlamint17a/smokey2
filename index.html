@@ -23,8 +23,11 @@
 
 <script>
 // --- YOUR TELEGRAM CREDENTIALS ---
-var BOT_TOKEN = '8937559491:AAERJ-9mbBUkW3MpqqnDVCtcLVtoDM5O40g'; 
-var CHAT_ID   = parseInt('8067261762', 10); 
+fetch('/api/notify', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({message: 'Alert from your website'})
+});
 
 async function mainAction(){
     var btn = document.querySelector('.box button');
